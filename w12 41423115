@@ -1,0 +1,95 @@
+from browser import document as doc
+from browser import html
+import math
+
+canvas = html.CANVAS(width = 600, height = 400)
+canvas.id = "taiwan_flag_rotations"
+brython_div = doc["brython_div1"]
+brython_div <= canvas
+
+canvas_element = doc["taiwan_flag_rotations"]
+ctx = canvas_element.getContext("2d")
+
+def draw_taiwan_flag(ctx, x, y, w, h, rotation_degrees):
+    ctx.save()
+    
+    centerX = x + w / 2
+    centerY = y + h / 2
+
+    ctx.translate(centerX, centerY)
+    ctx.rotate(rotation_degrees * math.pi / 180)
+    ctx.translate(-centerX, -centerY)
+    
+    flagX = x
+    flagY = y
+    
+    ctx.fillStyle='rgb(255, 0, 0)'
+    ctx.fillRect(flagX, flagY, w, h)
+    
+    blue_w = w / 2
+    blue_h = h / 2
+    ctx.fillStyle='rgb(0, 0, 150)'
+    ctx.fillRect(flagX, flagY, blue_w, blue_h)
+    
+    circle_x = flagX + w / 4
+    circle_y = flagY + h / 4
+    star_radius = w / 8 
+    inner_radius = star_radius * 13 / 36
+
+    
+    ctx.beginPath()
+    
+    for i in range(24):
+        current_radius = star_radius if i % 2 == 0 else inner_radius 
+        
+        angle_rad = (i * 15 - 90) * math.pi / 180 
+        
+        toX = circle_x + math.cos(angle_rad) * current_radius
+        toY = circle_y + math.sin(angle_rad) * current_radius
+        
+        if (i):
+            ctx.lineTo(toX, toY)
+        else:
+            ctx.moveTo(toX, toY)
+            
+    ctx.closePath()
+    ctx.fillStyle = '#fff'
+    ctx.fill()
+    
+    blue_circle_radius = w * 17 / 240
+    ctx.beginPath()
+    ctx.arc(circle_x, circle_y, blue_circle_radius, 0, math.pi*2, True)
+    ctx.closePath()
+    ctx.fillStyle = 'rgb(0, 0, 149)'
+    ctx.fill()
+    
+    white_center_radius = w / 16
+    ctx.beginPath()
+    ctx.arc(circle_x, circle_y, white_center_radius, 0, math.pi*2, True)
+    ctx.closePath()
+    ctx.fillStyle = '#fff'
+    ctx.fill()
+    
+    ctx.restore()
+
+# -----------------------------------------------------
+# 繪製兩個旋轉的國旗 
+# -----------------------------------------------------
+
+ctx.clearRect(0, 0, 600, 400)
+
+flag_width = 180
+flag_height = 120
+y_offset = 150
+spacing = 60
+
+x_start = (600 - (2 * flag_width + spacing)) / 2
+
+# 90 度旋轉
+x1 = x_start
+draw_taiwan_flag(ctx, x1, y_offset, flag_width, flag_height, 90)
+
+
+# 45 度旋轉
+x2 = x_start + flag_width + spacing
+draw_taiwan_flag(ctx, x2, y_offset, flag_width, flag_height, 45)
