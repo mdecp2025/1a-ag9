@@ -1,0 +1,100 @@
+# game.py (雙彈弓 + 6隻小豬 手機相容版)
+from browser import document, html, timer, ajax, window
+from random import random
+
+canvas = document["gameCanvas"]
+ctx = canvas.getContext("2d")
+WIDTH, HEIGHT = 800, 400
+
+bird_img = html.IMG(src="/static/images/bird.png")
+pig_img = html.IMG(src="/static/images/pig.png")
+
+SLINGS = [(120, 300), (120, 150)]
+MAX_SHOTS = 10
+shots_fired = 0
+total_score = 0
+mouse_down = False
+mouse_pos = (0, 0)
+active_sling = None
+projectile = None
+
+class Pig:
+    def __init__(self):
+        self.w, self.h = 40, 40
+        self.relocate()
+    def draw(self):
+        ctx.fillStyle = "saddlebrown"
+        ctx.fillRect(self.x - 40, self.y + 40, 120, 15)
+        ctx.drawImage(pig_img, self.x, self.y, self.w, self.h)
+    def relocate(self):
+        self.x = 450 + random() * 200
+        self.y = 100 + random() * 200
+
+pigs = [Pig() for _ in range(6)]
+
+def get_input_pos(evt):
+    if hasattr(evt, 'touches') and len(evt.touches) > 0:
+        t = evt.touches[0]
+        return t.clientX - canvas.abs_left, t.clientY - canvas.abs_top
+    return evt.x - canvas.offsetLeft, evt.y - canvas.offsetTop
+
+def mousedown(evt):
+    global mouse_down, mouse_pos, active_sling
+    if projectile is None and shots_fired < MAX_SHOTS:
+        p = get_input_pos(evt)
+        for s in SLINGS:
+            if abs(p[0]-s[0]) < 60 and abs(p[1]-s[1]) < 60:
+                mouse_down, mouse_pos, active_sling = True, p, s
+                if evt.type.startswith('touch'): evt.preventDefault()
+
+def mousemove(evt):
+    global mouse_pos
+    if mouse_down:
+        mouse_pos = get_input_pos(evt)
+        if evt.type.startswith('touch'): evt.preventDefault()
+
+def mouseup(evt):
+    global mouse_down, projectile, shots_fired
+    if mouse_down:
+        mouse_down = False
+        p = get_input_pos(evt)
+        sx, sy = active_sling
+        projectile = {'x': sx, 'y': sy, 'vx': (sx-p[0])*0.25, 'vy': (sy-p[1])*0.25}
+        shots_fired += 1
+        if "shots_remaining" in document:
+            document["shots_remaining"].text = str(MAX_SHOTS - shots_fired)
+
+def loop():
+    global projectile, total_score, shots_fired
+    ctx.fillStyle = "#87CEEB" 
+    ctx.fillRect(0, 0, WIDTH, HEIGHT)
+    for p in pigs: p.draw()
+    ctx.strokeStyle = "black"
+    ctx.lineWidth = 4
+    for sx, sy in SLINGS:
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, sy+40); ctx.stroke()
+        if mouse_down and active_sling == (sx, sy):
+            ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(mouse_pos[0], mouse_pos[1]); ctx.stroke()
+            ctx.drawImage(bird_img, mouse_pos[0]-17, mouse_pos[1]-17, 35, 35)
+        elif projectile is None:
+            ctx.drawImage(bird_img, sx-17, sy-17, 35, 35)
+    if projectile:
+        projectile['vy'] += 0.35
+        projectile['x'] += projectile['vx']
+        projectile['y'] += projectile['vy']
+        ctx.drawImage(bird_img, projectile['x']-17, projectile['y']-17, 35, 35)
+        for p in pigs:
+            if p.x < projectile['x'] < p.x+40 and p.y < projectile['y'] < p.y+40:
+                p.relocate()
+                total_score += 50
+                if "score_display" in document:
+                    document["score_display"].text = str(total_score)
+                projectile = None; break
+        if projectile and (projectile['y'] > HEIGHT or projectile['x'] > WIDTH):
+            projectile = None
+    if shots_fired >= MAX_SHOTS and projectile is None:
+        shots_fired, total_score = 0, 0
+
+canvas.bind("mousedown", mousedown); canvas.bind("mousemove", mousemove); canvas.bind("mouseup", mouseup)
+canvas.bind("touchstart", mousedown); canvas.bind("touchmove", mousemove); canvas.bind("touchend", mouseup)
+timer.set_interval(loop, 30)
