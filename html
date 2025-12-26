@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>憤怒鳥與分散小豬遊戲</title>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/brython@3.10.7/brython.min.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/brython@3.10.7/brython_stdlib.js"></script>
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; background-color: #f0f0f0; }
+        canvas { background: #87CEEB; border: 2px solid #333; display: block; margin: 20px auto; touch-action: none; }
+        .info { font-size: 20px; font-weight: bold; }
+    </style>
+</head>
+<body onload="brython()">
+
+    <h1>憤怒鳥遊戲 - 自動分散版</h1>
+    
+    <div class="info">
+        分數: <span id="score_display">0</span> | 
+        剩餘次數: <span id="shots_remaining">10</span>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+    <p>操作說明：用滑鼠或手指拖動彈弓上的鳥，放開即可發射。</p>
+
+    <script type="text/python">
+from browser import document, html, timer, window
+from random import random
+
+canvas = document["gameCanvas"]
+ctx = canvas.getContext("2d")
+WIDTH, HEIGHT = 800, 400
+
+# --- 圖片處理 ---
+bird_img = html.IMG(src="/static/images/bird.png")
+pig_img = html.IMG(src="/static/images/pig.png")
+
+# 遊戲常數
+SLING_X, SLING_Y = 120, 300
+MAX_SHOTS = 10
+
+# 遊戲狀態
+shots_fired = 0
+total_score = 0
+mouse_down = False
+mouse_pos = (SLING_X, SLING_Y)
+projectile = None
+game_phase = "playing"
+game_over_countdown = 0
+pigs = []
+
+class Pig:
+    def __init__(self):
+        self.w, self.h = 40, 40
+        self.x, self.y = 0, 0
+        self.alive = True
+        self.house_blocks = [(0, 40, 120, 15), (0, -10, 15, 50), (105, -10, 15, 50), (0, -25, 120, 15)]
+
+    def draw(self):
+        if not self.alive: return
+        ctx.fillStyle = "saddlebrown"
+        for rx, ry, rw, rh in self.house_blocks:
+            ctx.fillRect(self.x + rx - 40, self.y + ry, rw, rh)
+        if pig_img.complete:
+            ctx.drawImage(pig_img, self.x, self.y, self.w, self.h)
+
+    def hit(self, px, py):
+        return self.alive and self.x <= px <= self.x + self.w and self.y <= py <= self.y + self.h
+
+    def relocate(self, other_pigs):
+        MIN_DISTANCE = 140
+        for _ in range(100):
+            new_x = 450 + random() * (WIDTH - 570)
+            new_y = 150 + random() * (HEIGHT - 230)
+            too_close = any(((new_x - p.x)**2 + (new_y - p.y)**2)**0.5 < MIN_DISTANCE for p in other_pigs)
+            if not too_close:
+                self.x, self.y = new_x, new_y
+                break
+
+class Bird:
+    def __init__(self, x, y, vx, vy):
+        self.x, self.y, self.vx, self.vy = x, y, vx, vy
+        self.w, self.h = 35, 35
+        self.active = True
+
+    def update(self):
+        global total_score
+        if not self.active: return
+        self.vy += 0.35
+        self.x += self.vx
+        self.y += self.vy
+        if self.y > HEIGHT or self.x > WIDTH or self.x < 0: self.active = False
+        for p in pigs:
+            if p.hit(self.x + 17, self.y + 17):
+                p.alive = False
+                total_score += 50
+                document["score_display"].text = str(total_score)
+                self.active = False
+                if all(not p.alive for p in pigs): timer.set_timeout(init_level, 600)
+                break
+
+    def draw(self):
+        if bird_img.complete: ctx.drawImage(bird_img, self.x, self.y, self.w, self.h)
+
+def init_level():
+    global pigs
+    pigs = []
+    for _ in range(3):
+        new_pig = Pig()
+        new_pig.relocate(pigs)
+        pigs.append(new_pig)
+
+def start_new_game():
+    global shots_fired, total_score, projectile, game_phase, game_over_countdown
+    total_score, shots_fired = 0, 0
+    document["score_display"].text = "0"
+    document["shots_remaining"].text = str(MAX_SHOTS)
+    projectile, game_phase, game_over_countdown = None, "playing", 0
+    init_level()
+
+def get_pos(evt):
+    rect = canvas.getBoundingClientRect()
+    tx = evt.touches[0].clientX if hasattr(evt, "touches") else evt.clientX
+    ty = evt.touches[0].clientY if hasattr(evt, "touches") else evt.clientY
+    return (tx - rect.left) * (canvas.width / rect.width), (ty - rect.top) * (canvas.height / rect.height)
+
+def mousedown(evt):
+    global mouse_down, mouse_pos
+    if game_phase == "playing" and projectile is None and shots_fired < MAX_SHOTS:
+        mouse_down = True
+        mouse_pos = get_pos(evt)
+
+def mousemove(evt):
+    global mouse_pos
+    if mouse_down: mouse_pos = get_pos(evt)
+
+def mouseup(evt):
+    global mouse_down, projectile, shots_fired
+    if mouse_down:
+        mouse_down = False
+        end_pos = get_pos(evt)
+        dx, dy = SLING_X - end_pos[0], SLING_Y - end_pos[1]
+        projectile = Bird(SLING_X, SLING_Y, dx * 0.25, dy * 0.25)
+        shots_fired += 1
+        document["shots_remaining"].text = str(MAX_SHOTS - shots_fired)
+
+canvas.bind("mousedown", mousedown); window.bind("mousemove", mousemove); window.bind("mouseup", mouseup)
+canvas.bind("touchstart", mousedown); canvas.bind("touchmove", mousemove); canvas.bind("touchend", mouseup)
+
+def loop():
+    global game_phase, game_over_countdown, projectile
+    ctx.clearRect(0, 0, WIDTH, HEIGHT)
+    for p in pigs: p.draw()
+    if mouse_down:
+        ctx.beginPath(); ctx.moveTo(SLING_X, SLING_Y); ctx.lineTo(mouse_pos[0], mouse_pos[1]); ctx.stroke()
+        if bird_img.complete: ctx.drawImage(bird_img, mouse_pos[0]-17, mouse_pos[1]-17, 35, 35)
+    elif projectile is None and shots_fired < MAX_SHOTS and bird_img.complete:
+        ctx.drawImage(bird_img, SLING_X-17, SLING_Y-17, 35, 35)
+    if projectile:
+        projectile.update(); projectile.draw()
+        if not projectile.active: projectile = None
+    if game_phase == "playing" and shots_fired >= MAX_SHOTS and projectile is None:
+        game_phase, game_over_countdown = "game_over", 90
+    if game_phase == "game_over":
+        ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0,0,WIDTH,HEIGHT)
+        ctx.fillStyle = "white"; ctx.font = "40px Arial"; ctx.fillText("Game Over", WIDTH//2-100, HEIGHT//2)
+        game_over_countdown -= 1
+        if game_over_countdown <= 0: start_new_game()
+
+timer.set_interval(loop, 30)
+start_new_game()
+    </script>
+</body>
+</html>
